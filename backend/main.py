@@ -2,7 +2,7 @@ import asyncio
 import base64
 import uuid
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, UploadFile
@@ -21,7 +21,7 @@ try:
   )
   from .db import IMAGE_TABLE_SQL, VIDEO_TABLE_SQL, SqliteJobStore
   from .storage import collect_upload_files, save_upload
-  from .streaming import extract_image_updates, extract_video_updates, stream_ndjson_lines
+  from .streaming import stream_ndjson_lines
   from .validation import (
     get_form_text,
     normalize_aspect_ratio,
@@ -36,7 +36,12 @@ try:
   )
   from .chat_service import stream_chat_events
   from .chat_state import load_state
-except ImportError:  # pragma: no cover
+  from .tasks import (
+    build_headers,
+    create_image_job_manager,
+    create_video_job_manager,
+  )
+except ImportError:
   from config import (
     IMAGE_DB_PATH,
     SORA_API_KEY,
@@ -48,7 +53,7 @@ except ImportError:  # pragma: no cover
   )
   from db import IMAGE_TABLE_SQL, VIDEO_TABLE_SQL, SqliteJobStore
   from storage import collect_upload_files, save_upload
-  from streaming import extract_image_updates, extract_video_updates, stream_ndjson_lines
+  from streaming import stream_ndjson_lines
   from validation import (
     get_form_text,
     normalize_aspect_ratio,
@@ -63,6 +68,11 @@ except ImportError:  # pragma: no cover
   )
   from chat_service import stream_chat_events
   from chat_state import load_state
+  from tasks import (
+    build_headers,
+    create_image_job_manager,
+    create_video_job_manager,
+  )
 
 ensure_upload_dir()
 
@@ -71,147 +81,19 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 video_store = SqliteJobStore(VIDEO_DB_PATH, "video_jobs", VIDEO_TABLE_SQL)
 image_store = SqliteJobStore(IMAGE_DB_PATH, "image_jobs", IMAGE_TABLE_SQL)
-HTTP_TIMEOUT = httpx.Timeout(30.0, read=300.0)
-
-
-def create_video_job(
-  request_id: str,
-  prompt: str,
-  mode: str,
-  aspect_ratio: str,
-  duration: int,
-  size: str,
-  remix_target_id: str,
-) -> None:
-  video_store.insert(
-    {
-      "request_id": request_id,
-      "created_at": datetime.utcnow().isoformat(),
-      "prompt": prompt,
-      "mode": mode,
-      "aspect_ratio": aspect_ratio,
-      "duration": duration,
-      "size": size,
-      "remix_target_id": remix_target_id,
-      "status": "submitted",
-      "progress": 0,
-    }
-  )
-
-
-def update_video_job(request_id: str, **fields: object) -> None:
-  if not fields:
-    return
-  video_store.update(request_id, fields)
-
-
-def create_image_job(
-  request_id: str,
-  prompt: str,
-  model: str,
-  aspect_ratio: str,
-  image_size: str,
-  image_count: int,
-) -> None:
-  image_store.insert(
-    {
-      "request_id": request_id,
-      "created_at": datetime.utcnow().isoformat(),
-      "prompt": prompt,
-      "model": model,
-      "aspect_ratio": aspect_ratio,
-      "image_size": image_size,
-      "image_count": image_count,
-      "status": "submitted",
-      "progress": 0,
-    }
-  )
-
-
-def update_image_job(request_id: str, **fields: object) -> None:
-  if not fields:
-    return
-  image_store.update(request_id, fields)
-
-
-def build_headers(api_key: str) -> dict[str, str]:
-  return {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {api_key}",
-  }
+video_manager = create_video_job_manager(video_store)
+image_manager = create_image_job_manager(image_store)
 
 
 async def handle_upstream_error(
   response: httpx.Response,
-  request_id: Optional[str] = None,
-  update_fn: Optional[Callable[..., None]] = None,
 ) -> JSONResponse:
   details = (await response.aread()).decode("utf-8", errors="ignore")
-  if request_id and update_fn:
-    update_fn(request_id, status="failed", error=details)
   logger.warning("Upstream error %s: %s", response.status_code, details)
   return JSONResponse(
     {"error": "Upstream error", "details": details},
     status_code=response.status_code,
   )
-
-
-async def _run_video_job(
-  request_id: str,
-  payload: dict,
-  headers: dict[str, str],
-  upstream_url: str,
-) -> None:
-  update_video_job(request_id, status="running")
-  try:
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-      async with client.stream("POST", upstream_url, headers=headers, json=payload) as response:
-        if response.status_code >= 400:
-          await handle_upstream_error(response, request_id, update_video_job)
-          return
-
-        def handle_payload(payload_data: dict[str, object]) -> None:
-          updates = extract_video_updates(payload_data)
-          if updates:
-            update_video_job(request_id, **updates)
-
-        async for _ in stream_ndjson_lines(response, on_payload=handle_payload):
-          pass
-    job = video_store.fetch(request_id)
-    if job and job.get("result_url") and job.get("status") not in {"succeeded", "failed"}:
-      update_video_job(request_id, status="succeeded")
-  except Exception as exc:
-    logger.exception("Video job %s failed", request_id)
-    update_video_job(request_id, status="failed", error=str(exc))
-
-
-async def _run_image_job(
-  request_id: str,
-  payload: dict,
-  headers: dict[str, str],
-  upstream_url: str,
-) -> None:
-  update_image_job(request_id, status="running")
-  try:
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-      async with client.stream("POST", upstream_url, headers=headers, json=payload) as response:
-        if response.status_code >= 400:
-          await handle_upstream_error(response, request_id, update_image_job)
-          return
-
-        def handle_payload(payload_data: dict[str, object]) -> None:
-          updates = extract_image_updates(payload_data)
-          if updates:
-            update_image_job(request_id, **updates)
-
-        async for _ in stream_ndjson_lines(response, on_payload=handle_payload):
-          pass
-    job = image_store.fetch(request_id)
-    if job and job.get("result_url") and job.get("status") not in {"succeeded", "failed"}:
-      update_image_job(request_id, status="succeeded")
-  except Exception as exc:
-    logger.exception("Image job %s failed", request_id)
-    update_image_job(request_id, status="failed", error=str(exc))
 
 
 @app.post("/api/chat")
@@ -318,14 +200,16 @@ async def sora_video(request: Request):
   }
 
   request_id = uuid.uuid4().hex
-  create_video_job(
-    request_id=request_id,
-    prompt=cleaned_prompt,
-    mode=mode_value,
-    aspect_ratio=payload["aspectRatio"],
-    duration=payload["duration"],
-    size=payload["size"],
-    remix_target_id=remix_target_id,
+  video_manager.create_job(
+    request_id,
+    {
+      "prompt": cleaned_prompt,
+      "mode": mode_value,
+      "aspect_ratio": payload["aspectRatio"],
+      "duration": payload["duration"],
+      "size": payload["size"],
+      "remix_target_id": remix_target_id,
+    },
   )
 
   if upload_url:
@@ -336,7 +220,7 @@ async def sora_video(request: Request):
   headers = build_headers(api_key)
   upstream_url = f"{SORA_BASE_URL}/v1/video/sora-video"
 
-  asyncio.create_task(_run_video_job(request_id, payload, headers, upstream_url))
+  asyncio.create_task(video_manager.run_job(request_id, payload, headers, upstream_url))
   return JSONResponse({"request_id": request_id})
 
 
@@ -367,8 +251,9 @@ async def sora_character(request: Request):
 
   headers = build_headers(api_key)
   upstream_url = f"{SORA_BASE_URL}/v1/video/sora-upload-character"
+  timeout = httpx.Timeout(30.0, read=300.0)
 
-  async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+  async with httpx.AsyncClient(timeout=timeout) as client:
     async with client.stream("POST", upstream_url, headers=headers, json=payload) as response:
       if response.status_code >= 400:
         return await handle_upstream_error(response)
@@ -397,8 +282,9 @@ async def sora_character_from_pid(request: Request):
 
   headers = build_headers(api_key)
   upstream_url = f"{SORA_BASE_URL}/v1/video/sora-create-character"
+  timeout = httpx.Timeout(30.0, read=300.0)
 
-  async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+  async with httpx.AsyncClient(timeout=timeout) as client:
     async with client.stream("POST", upstream_url, headers=headers, json=payload) as response:
       if response.status_code >= 400:
         return await handle_upstream_error(response)
@@ -425,7 +311,7 @@ async def nano_banana(request: Request):
     raise HTTPException(status_code=400, detail="Prompt is required.")
 
   image_files = collect_upload_files(form, "images")
-  urls: list[str] = []
+  urls = []
   for image in image_files:
     if not image.content_type or not image.content_type.startswith("image/"):
       raise HTTPException(status_code=400, detail="Only image uploads are supported.")
@@ -439,20 +325,22 @@ async def nano_banana(request: Request):
     "imageSize": image_size,
   }
   if urls:
-    payload["urls"] = urls
+    payload["urls"] = list(urls)
 
   request_id = uuid.uuid4().hex
-  create_image_job(
-    request_id=request_id,
-    prompt=prompt,
-    model=model,
-    aspect_ratio=aspect_ratio,
-    image_size=image_size,
-    image_count=len(urls),
+  image_manager.create_job(
+    request_id,
+    {
+      "prompt": prompt,
+      "model": model,
+      "aspect_ratio": aspect_ratio,
+      "image_size": image_size,
+      "image_count": len(urls),
+    },
   )
 
   headers = build_headers(api_key)
   upstream_url = f"{SORA_BASE_URL}/v1/draw/nano-banana"
 
-  asyncio.create_task(_run_image_job(request_id, payload, headers, upstream_url))
+  asyncio.create_task(image_manager.run_job(request_id, payload, headers, upstream_url))
   return JSONResponse({"request_id": request_id})

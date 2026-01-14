@@ -1,203 +1,67 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
-
-type StatusState = "idle" | "running" | "succeeded" | "failed";
-
-const formatFileSize = (bytes: number) => {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "0 KB";
-  }
-  const kb = bytes / 1024;
-  if (kb < 1024) {
-    return `${kb.toFixed(1)} KB`;
-  }
-  return `${(kb / 1024).toFixed(2)} MB`;
-};
-
-const clampProgress = (value: number) => Math.min(100, Math.max(0, value));
-
-const getFailureMessage = (reason: string, error: string) => {
-  if (reason === "input_moderation") {
-    return "输入内容可能涉及违规，请调整提示词或参考图。";
-  }
-  if (reason === "output_moderation") {
-    return "生成内容未通过审核，请修改提示词后重试。";
-  }
-  if (error) {
-    return `生成失败：${error}`;
-  }
-  return "生成失败，请稍后重试。";
-};
-
-const POLL_INTERVAL_MS = 1500;
+import { useFileUpload } from "@/hooks/useFileUpload";
+import { useJobPoll } from "@/hooks/useJobPoll";
+import { formatFileSize } from "@/lib/utils";
 
 export default function ImagePage() {
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState("nano-banana-pro");
   const [aspectRatio, setAspectRatio] = useState("auto");
   const [imageSize, setImageSize] = useState("1K");
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultContent, setResultContent] = useState("");
-  const [isDragging, setIsDragging] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState<StatusState>("idle");
-  const [taskId, setTaskId] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  
+  const fileUpload = useFileUpload("image/*", true);
+  const jobPoll = useJobPoll();
   const abortRef = useRef<AbortController | null>(null);
-  const pollRef = useRef<number | null>(null);
-  const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-  const downloadName = selectedFiles.length
-    ? `generated-${selectedFiles[0].name}`
+
+  const totalSize = fileUpload.files.reduce((sum: number, file: File) => sum + file.size, 0);
+  const downloadName = fileUpload.files.length
+    ? `generated-${fileUpload.files[0].name}`
     : "generated-image.png";
 
   useEffect(() => {
-    return () => {
-      previewUrls.forEach((url) => URL.revokeObjectURL(url));
-      if (resultUrl && !previewUrls.includes(resultUrl)) {
+    if (resultUrl && !fileUpload.previewUrls.includes(resultUrl)) {
+      if (resultUrl.startsWith("blob:")) {
         URL.revokeObjectURL(resultUrl);
       }
-    };
-  }, [previewUrls, resultUrl]);
-
-  const stopPolling = () => {
-    if (pollRef.current !== null) {
-      window.clearTimeout(pollRef.current);
-      pollRef.current = null;
     }
-  };
+    return () => fileUpload.cleanup();
+  }, [resultUrl, fileUpload]);
 
-  useEffect(() => () => stopPolling(), []);
-
-  const handleFiles = (files: FileList | File[]) => {
-    const incoming = Array.from(files).filter((file) => file.type.startsWith("image/"));
-    if (incoming.length === 0) {
-      return;
-    }
-    stopPolling();
-    const nextUrls = incoming.map((file) => URL.createObjectURL(file));
-    setSelectedFiles(incoming);
-    setPreviewUrls(nextUrls);
+  const resetAll = () => {
+    jobPoll.resetJob();
+    fileUpload.clearFiles();
     setResultUrl(null);
     setResultContent("");
-    setStatus("idle");
-    setProgress(0);
-    setTaskId("");
-    setErrorMessage("");
+    setIsSubmitting(false);
   };
 
-  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      handleFiles(files);
-    }
-    event.target.value = "";
-  };
-
-  const openFilePicker = () => {
-    fileInputRef.current?.click();
-  };
-
-  const applyJobPayload = (payload: Record<string, unknown>) => {
-    if (typeof payload.type === "string" && payload.type !== "image") {
-      return;
-    }
-    if (typeof payload.id === "string") {
-      setTaskId(payload.id);
-    }
-    if (typeof payload.progress === "number") {
-      setProgress(clampProgress(Math.round(payload.progress)));
-    }
-    if (typeof payload.status === "string") {
-      if (payload.status === "running" || payload.status === "submitted") {
-        setStatus("running");
-      } else if (payload.status === "succeeded") {
-        setStatus("succeeded");
-        setIsSubmitting(false);
-        stopPolling();
-      } else if (payload.status === "failed") {
-        setStatus("failed");
-        setIsSubmitting(false);
-        stopPolling();
-      }
-    }
-
-    const result = payload.result;
-    if (result && typeof result === "object") {
-      const record = result as { url?: unknown; content?: unknown };
-      if (typeof record.url === "string") {
-        setResultUrl(record.url);
-        setStatus("succeeded");
-        setIsSubmitting(false);
-        stopPolling();
-      }
-      if (typeof record.content === "string") {
-        setResultContent(record.content);
-      }
-    }
-
-    const failureReason =
-      typeof payload.failure_reason === "string" ? payload.failure_reason : "";
-    const errorDetail = typeof payload.error === "string" ? payload.error : "";
-    if (failureReason || errorDetail) {
-      setErrorMessage(getFailureMessage(failureReason, errorDetail));
-      if (payload.status === "failed") {
-        setStatus("failed");
-        setIsSubmitting(false);
-        stopPolling();
-      }
-    }
-  };
-
-  const pollJob = async (id: string) => {
-    try {
-      const response = await fetch(`/api/tasks/${encodeURIComponent(id)}`);
-      if (!response.ok) {
-        throw new Error(`请求失败 (${response.status})`);
-      }
-      const payload = (await response.json()) as Record<string, unknown>;
-      applyJobPayload(payload);
-      if (payload.status === "running" || payload.status === "submitted") {
-        pollRef.current = window.setTimeout(() => void pollJob(id), POLL_INTERVAL_MS);
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "生成失败，请稍后重试。";
-      setErrorMessage(message);
-      setStatus("failed");
-      setIsSubmitting(false);
-      stopPolling();
-    }
+  const handleFilesChange = () => {
+    resetAll();
   };
 
   const handleGenerate = () => {
-    if (isSubmitting) {
-      return;
-    }
+    if (isSubmitting) return;
     if (!prompt.trim()) {
-      setErrorMessage("请输入提示词。");
+      jobPoll.setErrorMessage("请输入提示词。");
       return;
     }
-    stopPolling();
+
+    resetAll();
     setIsSubmitting(true);
-    setStatus("running");
-    setProgress(0);
-    setTaskId("");
-    setErrorMessage("");
-    setResultUrl(null);
-    setResultContent("");
+    jobPoll.setStatus("running");
 
     const formData = new FormData();
     formData.append("prompt", prompt.trim());
     formData.append("model", model);
     formData.append("aspectRatio", aspectRatio);
     formData.append("imageSize", imageSize);
-    selectedFiles.forEach((file) => {
+    fileUpload.files.forEach((file: File) => {
       formData.append("images", file);
     });
 
@@ -216,55 +80,48 @@ export default function ImagePage() {
           const text = await response.text();
           throw new Error(text || `请求失败 (${response.status})`);
         }
-        const payload = (await response.json()) as { request_id?: unknown };
-        const requestId =
-          typeof payload.request_id === "string" ? payload.request_id : "";
+
+        const payload = await response.json() as { request_id?: string };
+        const requestId = typeof payload.request_id === "string" ? payload.request_id : "";
+        
         if (!requestId) {
           throw new Error("后端未返回任务 ID");
         }
-        setTaskId(requestId);
-        setStatus("running");
-        pollJob(requestId);
+
+        jobPoll.setTaskId(requestId);
+        jobPoll.startPolling(requestId, (data: any) => {
+          if (data?.result?.url) {
+            setResultUrl(data.result.url);
+            setIsSubmitting(false);
+          }
+          if (data?.result?.content) {
+            setResultContent(data.result.content);
+          }
+        });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
-          setErrorMessage("已取消生成。");
-          setStatus("idle");
-          setIsSubmitting(false);
-          stopPolling();
+          jobPoll.setErrorMessage("已取消生成。");
+          jobPoll.setStatus("idle");
         } else {
-          const message =
-            error instanceof Error ? error.message : "生成失败，请稍后重试。";
-          setErrorMessage(message);
-          setStatus("failed");
-          setIsSubmitting(false);
-          stopPolling();
+          const message = error instanceof Error ? error.message : "生成失败，请稍后重试。";
+          jobPoll.setErrorMessage(message);
+          jobPoll.setStatus("failed");
         }
+        setIsSubmitting(false);
       } finally {
         abortRef.current = null;
       }
     })();
   };
 
-  const clearSelection = () => {
-    stopPolling();
-    setSelectedFiles([]);
-    setPreviewUrls([]);
-    setResultUrl(null);
-    setResultContent("");
-    setStatus("idle");
-    setProgress(0);
-    setTaskId("");
-    setErrorMessage("");
-  };
-
   const statusLabel =
-    status === "running"
-      ? progress > 0
-        ? `生成中 ${progress}%`
+    jobPoll.status === "running"
+      ? jobPoll.progress > 0
+        ? `生成中 ${jobPoll.progress}%`
         : "生成中"
-      : status === "succeeded"
+      : jobPoll.status === "succeeded"
       ? "生成完成"
-      : status === "failed"
+      : jobPoll.status === "failed"
       ? "生成失败"
       : "等待提交";
 
@@ -293,44 +150,26 @@ export default function ImagePage() {
                 <div className="image-card-subtitle">选择模型并填写提示词</div>
               </div>
             </div>
+
             <div
-              className={`image-dropzone${isDragging ? " dragging" : ""}`}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setIsDragging(true);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
-              onDragLeave={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setIsDragging(false);
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setIsDragging(false);
-                const files = event.dataTransfer.files;
-                if (files && files.length > 0) {
-                  handleFiles(files);
-                }
-              }}
-              onClick={openFilePicker}
+              className={`image-dropzone${fileUpload.isDragging ? " dragging" : ""}`}
+              onDragEnter={fileUpload.handleDragEnter}
+              onDragOver={fileUpload.handleDragOver}
+              onDragLeave={fileUpload.handleDragLeave}
+              onDrop={fileUpload.handleDrop}
+              onClick={fileUpload.openFilePicker}
               role="button"
               tabIndex={0}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  openFilePicker();
+                  fileUpload.openFilePicker();
                 }
               }}
             >
-              {previewUrls.length > 0 ? (
+              {fileUpload.previewUrls.length > 0 ? (
                 <div className="image-preview-grid">
-                  {previewUrls.map((url, index) => (
+                  {fileUpload.previewUrls.map((url: string, index: number) => (
                     <img
                       key={`${url}-${index}`}
                       className="image-preview"
@@ -350,29 +189,37 @@ export default function ImagePage() {
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  openFilePicker();
+                  fileUpload.openFilePicker();
+                  handleFilesChange();
                 }}
+                disabled={isSubmitting}
               >
-                {previewUrls.length > 0 ? "重新选择" : "选择图片"}
+                {fileUpload.previewUrls.length > 0 ? "重新选择" : "选择图片"}
               </button>
               <input
-                ref={fileInputRef}
+                ref={fileUpload.fileInputRef}
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={handleInputChange}
+                onChange={(event) => {
+                  fileUpload.handleInputChange(event);
+                  handleFilesChange();
+                }}
                 hidden
+                disabled={isSubmitting}
               />
-              {selectedFiles.length > 0 ? (
+              {fileUpload.files.length > 0 ? (
                 <div className="image-file-meta">
-                  已选择 {selectedFiles.length} 张 · {formatFileSize(totalSize)}
+                  已选择 {fileUpload.files.length} 张 · {formatFileSize(totalSize)}
                   <button
                     className="image-clear"
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      clearSelection();
+                      fileUpload.clearFiles();
+                      resetAll();
                     }}
+                    disabled={isSubmitting}
                   >
                     清空
                   </button>
@@ -442,7 +289,9 @@ export default function ImagePage() {
                 value={prompt}
                 onChange={(event) => {
                   setPrompt(event.target.value);
-                  setStatus("idle");
+                  if (jobPoll.status === "succeeded") {
+                    jobPoll.setStatus("idle");
+                  }
                 }}
                 disabled={isSubmitting}
               />
@@ -466,35 +315,44 @@ export default function ImagePage() {
                 <div className="image-card-title">生成结果</div>
                 <div className="image-card-subtitle">完成后可预览与下载</div>
               </div>
-              <div className={`image-status-pill ${status}`}>{statusLabel}</div>
+              <div className={`image-status-pill ${jobPoll.status}`}>
+                {statusLabel}
+              </div>
             </div>
+
             <div className="image-output">
               {resultUrl ? (
                 <img src={resultUrl} alt="生成结果" />
               ) : (
                 <div className="image-output-placeholder">
-                  {status === "running" ? "生成中，请稍候..." : "生成结果将在这里显示"}
+                  {jobPoll.status === "running" ? "生成中，请稍候..." : "生成结果将在这里显示"}
                 </div>
               )}
             </div>
+
             <div className="image-status">
               <div className="image-status-line">
                 <span className="image-status-label">{statusLabel}</span>
-                {status === "running" ? (
-                  <span className="image-status-progress">{progress}%</span>
+                {jobPoll.status === "running" ? (
+                  <span className="image-status-progress">{jobPoll.progress}%</span>
                 ) : null}
               </div>
-              {status === "running" ? (
+              {jobPoll.status === "running" ? (
                 <div className="image-progress">
-                  <div className="image-progress-bar" style={{ width: `${progress}%` }} />
+                  <div className="image-progress-bar" style={{ width: `${jobPoll.progress}%` }} />
                 </div>
               ) : null}
-              {taskId ? <div className="image-meta-line">任务 ID：{taskId}</div> : null}
+              {jobPoll.taskId ? (
+                <div className="image-meta-line">任务 ID：{jobPoll.taskId}</div>
+              ) : null}
               {resultContent ? (
                 <div className="image-meta-line">描述：{resultContent}</div>
               ) : null}
-              {errorMessage ? <div className="image-error">{errorMessage}</div> : null}
+              {jobPoll.errorMessage ? (
+                <div className="image-error">{jobPoll.errorMessage}</div>
+              ) : null}
             </div>
+
             <div className="image-actions">
               {resultUrl ? (
                 <a className="image-download" href={resultUrl} download={downloadName}>

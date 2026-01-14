@@ -212,10 +212,11 @@ const streamHelloAgentHttp = async (
     throw new Error("Backend did not return a final response.");
   }
 
-  if (sawDelta && finalResult.streamed === undefined) {
-    finalResult.streamed = true;
+  const result = finalResult as AgentResult;
+  if (sawDelta && result.streamed === undefined) {
+    result.streamed = true;
   }
-  return finalResult;
+  return result;
 };
 
 export async function POST(req: Request) {

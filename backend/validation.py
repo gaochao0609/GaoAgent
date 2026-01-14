@@ -17,11 +17,15 @@ def get_form_text(form, *names: str, default: str = "") -> str:
   return default
 
 
+def normalize_choice(value: Optional[str], allowed: set[str], default: str) -> str:
+  if value is None:
+    return default
+  cleaned = value.strip()
+  return cleaned if cleaned in allowed else default
+
+
 def normalize_aspect_ratio(value: Optional[str]) -> str:
-  allowed = {"9:16", "16:9"}
-  if value in allowed:
-    return value
-  return "9:16"
+  return normalize_choice(value, {"9:16", "16:9"}, "9:16")
 
 
 def normalize_duration(value: Optional[str]) -> int:
@@ -33,46 +37,23 @@ def normalize_duration(value: Optional[str]) -> int:
 
 
 def normalize_size(value: Optional[str]) -> str:
-  allowed = {"small", "large"}
-  if value in allowed:
-    return value
-  return "small"
+  return normalize_choice(value, {"small", "large"}, "small")
 
 
 def normalize_image_model(value: str) -> str:
-  allowed = {"nano-banana-pro", "nano-banana-pro-cl"}
-  cleaned = value.strip()
-  if cleaned in allowed:
-    return cleaned
-  return "nano-banana-pro"
+  return normalize_choice(value, {"nano-banana-pro", "nano-banana-pro-cl"}, "nano-banana-pro")
 
 
 def normalize_image_aspect_ratio(value: str) -> str:
-  allowed = {
-    "auto",
-    "1:1",
-    "16:9",
-    "9:16",
-    "4:3",
-    "3:4",
-    "3:2",
-    "2:3",
-    "5:4",
-    "4:5",
-    "21:9",
-  }
-  cleaned = value.strip()
-  if cleaned in allowed:
-    return cleaned
-  return "auto"
+  return normalize_choice(
+    value,
+    {"auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9"},
+    "auto"
+  )
 
 
 def normalize_image_size(value: str) -> str:
-  allowed = {"1K", "2K", "4K"}
-  cleaned = value.strip()
-  if cleaned in allowed:
-    return cleaned
-  return "1K"
+  return normalize_choice(value, {"1K", "2K", "4K"}, "1K")
 
 
 def normalize_timestamps(value: str) -> str:
