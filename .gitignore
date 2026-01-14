@@ -1,0 +1,72 @@
+# 注释：Python 项目通用 .gitignore 规则
+# 忽略Python编译缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 忽略虚拟环境
+venv/
+env/
+*.env
+
+# 忽略日志文件
+*.log
+logs/
+
+# 忽略IDE配置文件（根据自己的编辑器选择）
+.idea/    # PyCharm
+.vscode/  # VSCode
+*.swp     # Vim
+
+# 忽略系统临时文件
+Thumbs.db  # Windows
+
+# 忽略打包/构建文件
+dist/
+build/
+*.egg-info/
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+
+
+outputapp
+node_modules
