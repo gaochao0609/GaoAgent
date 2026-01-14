@@ -1,0 +1,7 @@
+{
+  "name": "helloagent-root",
+  "private": true,
+  "scripts": {
+    "all": "node scripts/dev.js"
+  }
+}

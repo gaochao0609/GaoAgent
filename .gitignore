@@ -7,6 +7,9 @@ __pycache__/
 # 忽略虚拟环境
 venv/
 env/
+.conda/
+conda-meta/
+.condarc
 *.env
 
 # 忽略日志文件
@@ -42,6 +45,8 @@ build/
 # next.js
 /.next/
 /out/
+**/.next/
+**/out/
 
 # production
 /build
@@ -68,5 +73,19 @@ next-env.d.ts
 
 
 
+# python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# local runtime data
+uploads/
+*.sqlite
+*.sqlite-*
+
+# local apps (optional)
 outputapp
 node_modules
