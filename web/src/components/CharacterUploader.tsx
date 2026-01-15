@@ -420,7 +420,7 @@ export function CharacterUploader({
         )}
       </div>
 
-      {characterId && (
+      {characterId ? (
         <div className="character-id-block">
           <div className="character-id-label">角色 ID</div>
           <div className="character-id-value">{characterId}</div>
@@ -428,6 +428,8 @@ export function CharacterUploader({
             {copied ? "已复制" : "复制 ID"}
           </button>
         </div>
+      ) : (
+        <div className="character-output-placeholder">角色 ID 将在这里显示</div>
       )}
 
       {taskId && <div className="video-meta-line">任务 ID：{taskId}</div>}

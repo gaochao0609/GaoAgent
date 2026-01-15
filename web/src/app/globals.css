@@ -196,6 +196,7 @@ body > div {
   color: var(--muted);
   line-height: 1.4;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -629,7 +630,7 @@ body > div {
 .image-shell,
 .video-shell {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   background: var(--panel);
   border: 1px solid var(--panel-border);
@@ -706,6 +707,7 @@ body > div {
   box-shadow: var(--shadow-sm);
 }
 
+
 .image-content,
 .video-content {
   flex: 1;
@@ -724,6 +726,13 @@ body > div {
 
 .video-content {
   align-content: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: clamp(12px, 1.6vw, 18px);
+  padding: clamp(14px, 2.2vw, 24px);
+  padding-right: clamp(14px, 2.2vw, 24px);
+  padding-bottom: clamp(14px, 2.6vh, 30px);
+  overflow: hidden;
+  scrollbar-gutter: auto;
 }
 
 .image-card,
@@ -738,6 +747,11 @@ body > div {
   gap: 16px;
   min-height: 0;
   min-width: 0;
+}
+
+.video-card {
+  padding: clamp(12px, 1.4vw, 16px);
+  gap: clamp(10px, 1.4vw, 16px);
 }
 
 .image-card-header,
@@ -821,18 +835,18 @@ body > div {
 .character-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: clamp(10px, 1.4vw, 16px);
   min-height: 0;
   min-width: 0;
 }
 
 .character-dropzone {
-  min-height: 220px;
+  min-height: clamp(140px, 20vh, 220px);
 }
 
 .character-preview {
   width: 100%;
-  max-height: 220px;
+  max-height: clamp(140px, 20vh, 220px);
   border-radius: 12px;
   border: 1px solid var(--panel-border);
   background: #fff;
@@ -842,11 +856,11 @@ body > div {
 .character-trim {
   border: 1px solid var(--panel-border);
   border-radius: 14px;
-  padding: 12px;
+  padding: clamp(10px, 1.4vw, 12px);
   background: rgba(31, 111, 97, 0.03);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: clamp(8px, 1.2vw, 10px);
 }
 
 .character-clip-toggle {
@@ -1012,7 +1026,7 @@ body > div {
 .character-output {
   border: 1px dashed rgba(226, 217, 203, 0.9);
   border-radius: 16px;
-  min-height: 180px;
+  min-height: clamp(120px, 18vh, 180px);
   padding: 16px;
   background: rgba(31, 111, 97, 0.03);
   display: flex;
@@ -1097,17 +1111,17 @@ body > div {
 .video-text-hint {
   border: 1px dashed rgba(226, 217, 203, 0.9);
   border-radius: 14px;
-  padding: 18px;
+  padding: clamp(12px, 1.8vh, 18px);
   background: rgba(31, 111, 97, 0.04);
   color: var(--muted);
-  font-size: 13px;
+  font-size: clamp(12px, 1.2vw, 13px);
   line-height: 1.6;
 }
 
 .video-advanced {
   border: 1px solid var(--panel-border);
   border-radius: 14px;
-  padding: 12px 14px;
+  padding: clamp(10px, 1.4vw, 14px);
   background: rgba(31, 111, 97, 0.03);
 }
 
@@ -1120,8 +1134,8 @@ body > div {
 .video-advanced-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
+  gap: clamp(8px, 1.4vw, 12px);
+  margin-top: clamp(8px, 1.4vw, 12px);
 }
 
 .video-field {
@@ -1169,6 +1183,11 @@ body > div {
   background: rgba(31, 111, 97, 0.04);
   cursor: pointer;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.video-dropzone {
+  padding: clamp(12px, 2vh, 18px);
+  min-height: clamp(120px, 20vh, 200px);
 }
 
 .image-dropzone.dragging,
@@ -1229,7 +1248,7 @@ body > div {
 
 .video-preview {
   max-width: 100%;
-  max-height: 180px;
+  max-height: clamp(120px, 18vh, 180px);
   border-radius: 12px;
   border: 1px solid var(--panel-border);
   background: #fff;
@@ -1323,6 +1342,10 @@ body > div {
   color: var(--ink);
 }
 
+.video-prompt textarea {
+  min-height: clamp(72px, 12vh, 110px);
+}
+
 .image-actions,
 .video-actions {
   display: flex;
@@ -1364,6 +1387,11 @@ body > div {
   padding: 16px;
 }
 
+.video-output {
+  min-height: clamp(140px, 24vh, 240px);
+  padding: clamp(12px, 2vh, 16px);
+}
+
 .image-output img {
   max-width: 100%;
   max-height: 360px;
@@ -1374,7 +1402,7 @@ body > div {
 
 .video-output video {
   max-width: 100%;
-  max-height: 360px;
+  max-height: clamp(220px, 32vh, 360px);
   border-radius: 14px;
   box-shadow: var(--shadow-sm);
 }
@@ -1534,6 +1562,12 @@ body > div {
   box-shadow: none;
 }
 
+@media (max-width: 1200px) {
+  .video-content {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 960px) {
   body {
     padding: 10px;
@@ -1590,6 +1624,12 @@ body > div {
   .video-content {
     grid-template-columns: 1fr;
     padding: 18px;
+  }
+
+  .video-content {
+    padding: clamp(12px, 2vw, 18px);
+    padding-right: clamp(12px, 2vw, 18px);
+    padding-bottom: clamp(12px, 2.2vh, 22px);
   }
 
   .character-content {

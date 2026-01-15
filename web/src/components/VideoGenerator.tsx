@@ -1,10 +1,14 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, type ReactNode } from "react";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { useJobPoll } from "../hooks/useJobPoll";
 import { ClipSelector } from "./ClipSelector";
 import { formatFileSize, copyTextToClipboard } from "../lib/utils";
 
-export function VideoGenerator() {
+interface VideoGeneratorProps {
+  extraColumn?: ReactNode;
+}
+
+export function VideoGenerator({ extraColumn }: VideoGeneratorProps) {
   const [mode, setMode] = useState<"text" | "image">("text");
   const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState("9:16");
@@ -467,6 +471,7 @@ export function VideoGenerator() {
           </div>
         )}
       </div>
+      {extraColumn ?? null}
     </div>
   );
 }

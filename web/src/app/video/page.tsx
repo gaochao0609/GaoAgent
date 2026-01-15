@@ -26,30 +26,33 @@ export default function VideoPage() {
           </Link>
         </header>
 
-        <VideoGenerator />
 
-        <div className="video-card full">
-          <div className="video-card-header">
-            <div>
-              <div className="video-card-title">角色上传</div>
-              <div className="video-card-subtitle">上传视频并截取 0-3 秒创建角色</div>
+        <VideoGenerator
+          extraColumn={
+            <div className="video-card">
+              <div className="video-card-header">
+                <div>
+                  <div className="video-card-title">角色上传</div>
+                  <div className="video-card-subtitle">上传视频并截取 0-3 秒创建角色</div>
+                </div>
+              </div>
+              <div className="character-hint">生成后可在提示词中 @角色ID 使用</div>
+            
+              <CharacterUploader
+                label="上传视频创建角色"
+                description="支持从视频中截取 3 秒"
+                apiEndpoint="/api/video/character"
+                getFormData={(file: File, start: number, end: number) => {
+                  const formData = new FormData();
+                  formData.append("video", file);
+                  formData.append("timestamps", `${start.toFixed(2)},${end.toFixed(2)}`);
+                  return formData;
+                }}
+                onComplete={handleCharacterComplete}
+              />
             </div>
-          </div>
-          <div className="character-hint">生成后可在提示词中 @角色ID 使用</div>
-
-          <CharacterUploader
-            label="上传视频创建角色"
-            description="支持从视频中截取 3 秒"
-            apiEndpoint="/api/video/character"
-            getFormData={(file: File, start: number, end: number) => {
-              const formData = new FormData();
-              formData.append("video", file);
-              formData.append("timestamps", `${start.toFixed(2)},${end.toFixed(2)}`);
-              return formData;
-            }}
-            onComplete={handleCharacterComplete}
-          />
-        </div>
+          }
+        />
       </div>
     </div>
   );
