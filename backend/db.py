@@ -108,3 +108,9 @@ class SqliteJobStore:
     if row is None:
       return None
     return dict(row)
+
+  def close(self) -> None:
+    with self._lock:
+      if self._conn is not None:
+        self._conn.close()
+        self._conn = None

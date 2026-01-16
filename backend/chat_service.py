@@ -34,7 +34,9 @@ MAX_TURNS = int(os.environ.get("HELLOAGENT_MAX_TURNS", "0") or "0")
 CHAT_TIMEOUT_SECONDS = int(os.environ.get("HELLOAGENT_TIMEOUT", "300") or "300")
 
 UNKNOWN_REPLY = (
-  "当前仅支持：\n1) 天气查询 + 旅游景点推荐\n2) 代码开发与技术实现\n"
+  "当前仅支持：\n"
+  "1) 天气查询 + 旅游景点推荐\n"
+  "2) 代码开发与技术实现\n"
   "其他功能正在开发中。你可以说“查询北京天气并推荐景点”，或“帮我写一个XXX功能”。"
 )
 
@@ -54,34 +56,17 @@ def _has_keyword(text: str, keywords: list[str]) -> bool:
 
 
 def detect_intent_by_keyword(prompt: str) -> str:
-  normalized = "".join(prompt.split())
-  weather_keywords = ["天气", "气温", "温度", "降雨", "下雨", "晴天", "阴天", "风力", "空气质量", "AQI"]
-  travel_keywords = ["旅游", "景点", "出行", "旅行", "攻略", "推荐", "游玩"]
-  code_keywords = [
-    "写代码",
-    "写个",
-    "写一个",
-    "实现",
-    "开发",
-    "编程",
-    "代码",
-    "脚本",
-    "报错",
-    "bug",
-    "python",
-    "javascript",
-    "typescript",
-    "node",
-    "前端",
-    "后端",
-    "api",
-  ]
+  normalized = "".join(prompt.split()).lower()
+  weather_keywords = ['天气', '气温', '温度', '降雨', '下雨', '晴天', '阴天', '风力', '空气质量', 'aqi']
+  travel_keywords = ['旅游', '景点', '出行', '旅行', '攻略', '推荐', '游玩']
+  code_keywords = ['写代码', '写个', '写一个', '实现', '开发', '编程', '代码', '脚本', '报错', 'bug', 'python', 'javascript', 'typescript', 'node', '前端', '后端', 'api']
 
   if _has_keyword(normalized, weather_keywords) and _has_keyword(normalized, travel_keywords):
     return "weather-travel"
   if _has_keyword(normalized, code_keywords):
     return "code"
   return "unknown"
+
 
 
 def _parse_intent_label(text: str) -> Optional[str]:

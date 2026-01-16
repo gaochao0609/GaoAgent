@@ -1,6 +1,5 @@
 import uuid
 from pathlib import Path
-from typing import Iterable
 
 from fastapi import HTTPException, UploadFile
 
@@ -31,4 +30,9 @@ async def save_upload(file: UploadFile, upload_dir: Path) -> tuple[str, bytes]:
   except Exception as exc:
     logger.exception("Failed to save upload %s", file.filename)
     raise HTTPException(status_code=500, detail="Failed to save uploaded file.") from exc
+  finally:
+    try:
+      await file.close()
+    except Exception:
+      pass
   return filename, bytes(buffer)
