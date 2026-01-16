@@ -26,7 +26,6 @@ export default function VideoPage() {
           </Link>
         </header>
 
-
         <VideoGenerator
           extraColumn={
             <div className="video-card">
@@ -37,10 +36,10 @@ export default function VideoPage() {
                 </div>
               </div>
               <div className="character-hint">生成后可在提示词中 @角色ID 使用</div>
-            
+
               <CharacterUploader
                 label="上传视频创建角色"
-                description="支持从视频中截取 3 秒"
+                description="支持从视频中截取 0-3 秒"
                 apiEndpoint="/api/video/character"
                 getFormData={(file: File, start: number, end: number) => {
                   const formData = new FormData();

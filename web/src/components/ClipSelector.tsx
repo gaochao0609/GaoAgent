@@ -29,19 +29,19 @@ export function ClipSelector({
   const clipDuration = start !== null && end !== null ? end - start : null;
   const clipTooLong = clipDuration !== null && clipDuration > MAX_CLIP_DURATION;
   const clipInvalid = clipDuration !== null && clipDuration <= 0;
-  
+
   const timelineMax = duration ?? 0;
   const timelineStart = start ?? 0;
   const timelineEnd = end ?? Math.min(MAX_CLIP_DURATION, timelineMax);
-  
+
   const startPercent = timelineMax > 0 ? (timelineStart / timelineMax) * 100 : 0;
   const endPercent = timelineMax > 0 ? (timelineEnd / timelineMax) * 100 : 0;
-  
+
   const timelineStyle: CSSProperties = {
     ["--range-start" as any]: `${startPercent}%`,
     ["--range-end" as any]: `${endPercent}%`,
   };
-  
+
   const clipLabel =
     clipDuration === null
       ? "请选择 0-3 秒范围"
@@ -54,7 +54,7 @@ export function ClipSelector({
   return (
     <div className="character-trim">
       <div className="character-trim-caption">拖动时间线选择范围</div>
-      
+
       {timelineMax > 0 && (
         <>
           <div className="character-timeline" style={timelineStyle}>
@@ -79,7 +79,7 @@ export function ClipSelector({
               disabled={disabled || timelineMax <= 0}
             />
           </div>
-          
+
           <div className="character-timeline-labels">
             <span>0s</span>
             <span>{formatSeconds(timelineMax)}s</span>
@@ -133,13 +133,9 @@ export function ClipSelector({
         )}
       </div>
 
-      <div
-        className={`character-trim-meta${clipTooLong || clipInvalid ? " error" : ""}`}
-      >
+      <div className={`character-trim-meta${clipTooLong || clipInvalid ? " error" : ""}`}>
         {clipLabel}
-        {duration !== null ? (
-          <span> · 视频时长 {formatSeconds(duration)} 秒</span>
-        ) : null}
+        {duration !== null ? <span> · 视频时长 {formatSeconds(duration)} 秒</span> : null}
       </div>
     </div>
   );

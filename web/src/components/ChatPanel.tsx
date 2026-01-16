@@ -1,11 +1,11 @@
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent, RefObject } from "react";
 import type { UIMessage } from "ai";
 import { MessageContent, getMessageText } from "./MessageContent";
 import { usePageVisibility } from "../hooks/usePageVisibility";
 
-const DEFAULT_TITLE = "新对话";
+export const DEFAULT_TITLE = "新对话";
 
-const deriveTitle = (messages: UIMessage[]) => {
+export const deriveTitle = (messages: UIMessage[]) => {
   const firstUser = messages.find((message) => message.role === "user");
   if (!firstUser) return DEFAULT_TITLE;
   const text = getMessageText(firstUser);
@@ -13,7 +13,7 @@ const deriveTitle = (messages: UIMessage[]) => {
 };
 
 const renderName = (role: UIMessage["role"]) => {
-  if (role === "user") return "你";
+  if (role === "user") return "用户";
   if (role === "assistant") return "助手";
   return "系统";
 };
@@ -26,8 +26,7 @@ interface ChatPanelProps {
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
-  onStop: () => void;
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
 }
 
 export function ChatPanel({
@@ -38,7 +37,6 @@ export function ChatPanel({
   input,
   onInputChange,
   onSend,
-  onStop,
   textareaRef,
 }: ChatPanelProps) {
   const pageVisible = usePageVisibility();
@@ -46,11 +44,16 @@ export function ChatPanel({
   const isError = status === "error";
   const statusLabel = status === "ready" ? "就绪" : status === "error" ? "出错" : "生成中";
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       onSend();
     }
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    onSend();
   };
 
   return (
@@ -118,7 +121,7 @@ export function ChatPanel({
         ) : null}
       </div>
 
-      <form className="composer" onSubmit={(event) => { event.preventDefault(); onSend(); }}>
+      <form className="composer" onSubmit={handleSubmit}>
         <div className="composer-inner">
           <textarea
             ref={textareaRef}
@@ -144,5 +147,3 @@ export function ChatPanel({
     </section>
   );
 }
-
-export { deriveTitle };

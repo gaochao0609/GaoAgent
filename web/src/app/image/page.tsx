@@ -14,7 +14,7 @@ export default function ImagePage() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultContent, setResultContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const fileUpload = useFileUpload("image/*", true);
   const jobPoll = useJobPoll();
   const abortRef = useRef<AbortController | null>(null);
@@ -33,16 +33,26 @@ export default function ImagePage() {
     return () => fileUpload.cleanup();
   }, [resultUrl, fileUpload]);
 
-  const resetAll = () => {
+  useEffect(() => {
+    if (jobPoll.status === "failed" || jobPoll.status === "succeeded") {
+      setIsSubmitting(false);
+    }
+  }, [jobPoll.status]);
+
+  const resetJobState = () => {
     jobPoll.resetJob();
-    fileUpload.clearFiles();
     setResultUrl(null);
     setResultContent("");
     setIsSubmitting(false);
   };
 
+  const resetAll = () => {
+    resetJobState();
+    fileUpload.clearFiles();
+  };
+
   const handleFilesChange = () => {
-    resetAll();
+    resetJobState();
   };
 
   const handleGenerate = () => {
@@ -52,7 +62,7 @@ export default function ImagePage() {
       return;
     }
 
-    resetAll();
+    resetJobState();
     setIsSubmitting(true);
     jobPoll.setStatus("running");
 
@@ -81,11 +91,11 @@ export default function ImagePage() {
           throw new Error(text || `请求失败 (${response.status})`);
         }
 
-        const payload = await response.json() as { request_id?: string };
+        const payload = (await response.json()) as { request_id?: string };
         const requestId = typeof payload.request_id === "string" ? payload.request_id : "";
-        
+
         if (!requestId) {
-          throw new Error("后端未返回任务 ID");
+          throw new Error("后端未返回任务 ID。");
         }
 
         jobPoll.setTaskId(requestId);
@@ -216,7 +226,6 @@ export default function ImagePage() {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      fileUpload.clearFiles();
                       resetAll();
                     }}
                     disabled={isSubmitting}
@@ -315,9 +324,7 @@ export default function ImagePage() {
                 <div className="image-card-title">生成结果</div>
                 <div className="image-card-subtitle">完成后可预览与下载</div>
               </div>
-              <div className={`image-status-pill ${jobPoll.status}`}>
-                {statusLabel}
-              </div>
+              <div className={`image-status-pill ${jobPoll.status}`}>{statusLabel}</div>
             </div>
 
             <div className="image-output">
@@ -345,9 +352,7 @@ export default function ImagePage() {
               {jobPoll.taskId ? (
                 <div className="image-meta-line">任务 ID：{jobPoll.taskId}</div>
               ) : null}
-              {resultContent ? (
-                <div className="image-meta-line">描述：{resultContent}</div>
-              ) : null}
+              {resultContent ? <div className="image-meta-line">描述：{resultContent}</div> : null}
               {jobPoll.errorMessage ? (
                 <div className="image-error">{jobPoll.errorMessage}</div>
               ) : null}

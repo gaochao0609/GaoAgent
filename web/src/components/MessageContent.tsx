@@ -60,7 +60,7 @@ const parseMessageBlocks = (text: string): MessageBlock[] => {
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     const trimmed = line.trim();
-    
+
     if (trimmed.startsWith("```")) {
       flushList();
       flushParagraph();
@@ -80,7 +80,7 @@ const parseMessageBlocks = (text: string): MessageBlock[] => {
       flushCodeBlock(language, codeLines);
       continue;
     }
-    
+
     if (!trimmed) {
       flushList();
       flushParagraph();
@@ -106,10 +106,10 @@ const parseMessageBlocks = (text: string): MessageBlock[] => {
     }
 
     const semicolonSegments = trimmed
-      .split(/[；;]/)
+      .split(/[;；]/)
       .map((segment) => segment.trim())
       .filter(Boolean);
-    if (semicolonSegments.length > 1 || /[；;]$/.test(trimmed)) {
+    if (semicolonSegments.length > 1 || /[;；]$/.test(trimmed)) {
       flushParagraph();
       if (listOrdered === true) flushList();
       listOrdered = false;
@@ -165,7 +165,11 @@ interface MessageContentProps {
   isActive?: boolean;
 }
 
-export function MessageContent({ text, showTypewriter = false, isActive = false }: MessageContentProps) {
+export function MessageContent({
+  text,
+  showTypewriter = false,
+  isActive = false,
+}: MessageContentProps) {
   const normalized = normalizeMessageText(text);
   if (!normalized) {
     return <span className="message-muted">（非文本内容）</span>;

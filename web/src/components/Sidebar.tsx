@@ -32,7 +32,12 @@ const getPreview = (messages: any[]) => {
   return lastText ? truncate(lastText, 42) : "暂无消息";
 };
 
-export function Sidebar({ conversations, activeId, onSelectConversation, onNewConversation }: SidebarProps) {
+export function Sidebar({
+  conversations,
+  activeId,
+  onSelectConversation,
+  onNewConversation,
+}: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -63,15 +68,13 @@ export function Sidebar({ conversations, activeId, onSelectConversation, onNewCo
             style={{ animationDelay: `${index * 40}ms` }}
           >
             <div className="conversation-title">{conversation.title}</div>
-            <div className="conversation-preview">
-              {getPreview(conversation.messages)}
-            </div>
+            <div className="conversation-preview">{getPreview(conversation.messages)}</div>
           </button>
         ))}
       </div>
       <div className="sidebar-footer">
         <div className="sidebar-profile">
-          <div className="profile-avatar">你</div>
+          <div className="profile-avatar">访</div>
           <div className="profile-meta">
             <div className="profile-name">访客模式</div>
             <div className="profile-note">本地临时会话，不会自动保存。</div>

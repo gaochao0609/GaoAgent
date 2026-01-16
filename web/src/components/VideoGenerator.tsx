@@ -3,6 +3,7 @@ import { useFileUpload } from "../hooks/useFileUpload";
 import { useJobPoll } from "../hooks/useJobPoll";
 import { ClipSelector } from "./ClipSelector";
 import { formatFileSize, copyTextToClipboard } from "../lib/utils";
+import { streamNdjson } from "../lib/ndjson";
 
 interface VideoGeneratorProps {
   extraColumn?: ReactNode;
@@ -22,7 +23,7 @@ export function VideoGenerator({ extraColumn }: VideoGeneratorProps) {
   const [pidStart, setPidStart] = useState<number | null>(null);
   const [pidEnd, setPidEnd] = useState<number | null>(null);
   const [pidDuration, setPidDuration] = useState<number | null>(null);
-  
+
   const imageUpload = useFileUpload("image/*", false);
   const jobPoll = useJobPoll();
   const abortRef = useRef<AbortController | null>(null);
@@ -40,6 +41,12 @@ export function VideoGenerator({ extraColumn }: VideoGeneratorProps) {
       }
     };
   }, [resultUrl, imageUpload]);
+
+  useEffect(() => {
+    if (jobPoll.status === "failed" || jobPoll.status === "succeeded") {
+      setIsSubmitting(false);
+    }
+  }, [jobPoll.status]);
 
   const resetOutput = () => {
     if (isSubmitting) return;
@@ -157,11 +164,11 @@ export function VideoGenerator({ extraColumn }: VideoGeneratorProps) {
         throw new Error(text || `请求失败 (${response.status})`);
       }
 
-      const payload = await response.json() as { request_id?: string };
+      const payload = (await response.json()) as { request_id?: string };
       const requestId = typeof payload.request_id === "string" ? payload.request_id : "";
-      
+
       if (!requestId) {
-        throw new Error("后端未返回任务 ID");
+        throw new Error("后端未返回任务 ID。");
       }
 
       jobPoll.setTaskId(requestId);
@@ -200,10 +207,6 @@ export function VideoGenerator({ extraColumn }: VideoGeneratorProps) {
       : jobPoll.status === "failed"
       ? "生成失败"
       : "等待提交";
-
-  const pidClipTooLong = pidStart !== null && pidEnd !== null && pidEnd - pidStart > 3;
-  const pidClipInvalid = pidStart !== null && pidEnd !== null && pidEnd - pidStart <= 0;
-  const pidReady = Boolean(pid) && pidStart !== null && pidEnd !== null && !pidClipTooLong && !pidClipInvalid;
 
   return (
     <div className="video-content">
@@ -256,7 +259,11 @@ export function VideoGenerator({ extraColumn }: VideoGeneratorProps) {
             }}
           >
             {imageUpload.previewUrls.length > 0 ? (
-              <img className="video-preview" src={imageUpload.previewUrls[0]} alt="已选择图片预览" />
+              <img
+                className="video-preview"
+                src={imageUpload.previewUrls[0]}
+                alt="已选择图片预览"
+              />
             ) : (
               <>
                 <div className="video-drop-title">拖动图片到此处</div>
@@ -397,10 +404,10 @@ export function VideoGenerator({ extraColumn }: VideoGeneratorProps) {
               onClick={() => setPidClipOpen(true)}
               onPlay={() => setPidClipOpen(true)}
               onLoadedMetadata={(event) => {
-                const duration = event.currentTarget.duration;
-                setPidDuration(duration);
+                const durationValue = event.currentTarget.duration;
+                setPidDuration(durationValue);
                 if (pidStart === null && pidEnd === null) {
-                  const initialEnd = Math.min(3, duration);
+                  const initialEnd = Math.min(3, durationValue);
                   setPidStart(0);
                   setPidEnd(Number(initialEnd.toFixed(2)));
                 }
@@ -554,15 +561,7 @@ function PidCharacterPanel({
         throw new Error(text || `请求失败 (${response.status})`);
       }
 
-      const payload = await response.json() as { request_id?: string; character_id?: string };
-      const requestId = typeof payload.request_id === "string" ? payload.request_id : "";
-      
-      setTaskId(requestId);
-      setStatus("succeeded");
-      
-      if (typeof payload.character_id === "string") {
-        setCharacterId(payload.character_id);
-      }
+      await streamNdjson(response, handleStreamPayload);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         setErrorMessage("已取消创建。");
@@ -575,6 +574,50 @@ function PidCharacterPanel({
     } finally {
       setIsSubmitting(false);
       abortRef.current = null;
+    }
+  };
+
+  const handleStreamPayload = (payload: any) => {
+    if (
+      typeof payload.code === "number" &&
+      payload.code === 0 &&
+      payload.data &&
+      typeof payload.data.id === "string"
+    ) {
+      setTaskId(payload.data.id);
+      setStatus("running");
+      return;
+    }
+
+    if (typeof payload.id === "string") {
+      setTaskId(payload.id);
+    }
+    if (typeof payload.progress === "number") {
+      setProgress(Math.min(100, Math.max(0, Math.round(payload.progress))));
+    }
+    if (typeof payload.status === "string") {
+      if (payload.status === "running") setStatus("running");
+      else if (payload.status === "succeeded") setStatus("succeeded");
+      else if (payload.status === "failed") setStatus("failed");
+    }
+
+    const results = payload.results;
+    if (Array.isArray(results) && results.length > 0 && results[0]?.character_id) {
+      setCharacterId(results[0].character_id);
+      setStatus("succeeded");
+    }
+
+    const failureReason = typeof payload.failure_reason === "string" ? payload.failure_reason : "";
+    const errorDetail = typeof payload.error === "string" ? payload.error : "";
+    if (failureReason || errorDetail) {
+      const message =
+        failureReason === "input_moderation"
+          ? "输入内容可能涉及违规"
+          : failureReason === "output_moderation"
+          ? "生成内容未通过审核"
+          : errorDetail || "创建失败";
+      setErrorMessage(message);
+      if (payload.status === "failed") setStatus("failed");
     }
   };
 
@@ -635,11 +678,7 @@ function PidCharacterPanel({
           {isSubmitting ? "创建中..." : "创建角色"}
         </button>
         {isSubmitting && (
-          <button
-            className="video-cancel"
-            type="button"
-            onClick={() => abortRef.current?.abort()}
-          >
+          <button className="video-cancel" type="button" onClick={() => abortRef.current?.abort()}>
             取消
           </button>
         )}
@@ -654,9 +693,7 @@ function PidCharacterPanel({
           </button>
         </div>
       ) : (
-        <div className="character-output-placeholder">
-          角色创建完成后将在这里显示角色 ID
-        </div>
+        <div className="character-output-placeholder">角色创建完成后将显示角色 ID</div>
       )}
       {taskId ? <div className="video-meta-line">任务 ID：{taskId}</div> : null}
       {errorMessage ? <div className="video-error">{errorMessage}</div> : null}

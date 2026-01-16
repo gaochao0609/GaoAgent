@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { ClipSelector } from "./ClipSelector";
 import { formatFileSize, copyTextToClipboard } from "../lib/utils";
+import { streamNdjson } from "../lib/ndjson";
 
 type CharacterStatusState = "idle" | "running" | "succeeded" | "failed";
 
@@ -24,14 +25,12 @@ export function CharacterUploader({
   const [start, setStart] = useState<number | null>(null);
   const [end, setEnd] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
-  const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<CharacterStatusState>("idle");
   const [taskId, setTaskId] = useState("");
   const [characterId, setCharacterId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
 
   const fileUpload = useFileUpload("video/*", false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -43,23 +42,18 @@ export function CharacterUploader({
     return () => window.clearTimeout(timer);
   }, [copied]);
 
-  useEffect(() => {
-    return () => fileUpload.cleanup();
-  }, [fileUpload]);
+  useEffect(() => () => fileUpload.cleanup(), [fileUpload]);
 
   const resetOutput = () => {
     if (isSubmitting) return;
     setStatus("idle");
-    setProgress(0);
     setTaskId("");
     setCharacterId("");
     setErrorMessage("");
     setCopied(false);
-    setIsStreaming(false);
   };
 
   const resetSelection = () => {
-    fileUpload.cleanup();
     fileUpload.clearFiles();
     setStart(null);
     setEnd(null);
@@ -73,7 +67,6 @@ export function CharacterUploader({
       setErrorMessage("仅支持上传视频文件。");
       return;
     }
-    resetOutput();
     resetSelection();
     const url = URL.createObjectURL(file);
     fileUpload.setFiles([file]);
@@ -153,11 +146,9 @@ export function CharacterUploader({
 
     setIsSubmitting(true);
     setStatus("running");
-    setProgress(0);
     setTaskId("");
     setCharacterId("");
     setErrorMessage("");
-    setIsStreaming(true);
 
     const formData = getFormData(fileUpload.files[0], start, end);
     const controller = new AbortController();
@@ -175,35 +166,7 @@ export function CharacterUploader({
         throw new Error(text || `请求失败 (${response.status})`);
       }
 
-      if (!response.body) {
-        const text = await response.text();
-        const parsed = JSON.parse(text);
-        handleStreamPayload(parsed);
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          const payload = parseStreamLine(line);
-          if (payload) {
-            handleStreamPayload(payload);
-          }
-        }
-      }
-
-      const finalPayload = parseStreamLine(buffer);
-      if (finalPayload) {
-        handleStreamPayload(finalPayload);
-      }
+      await streamNdjson(response, handleStreamPayload);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         setErrorMessage("已取消上传。");
@@ -215,17 +178,7 @@ export function CharacterUploader({
       }
     } finally {
       setIsSubmitting(false);
-      setIsStreaming(false);
       abortRef.current = null;
-    }
-  };
-
-  const parseStreamLine = (line: string) => {
-    if (!line.trim()) return null;
-    try {
-      return JSON.parse(line);
-    } catch {
-      return null;
     }
   };
 
@@ -244,9 +197,6 @@ export function CharacterUploader({
     if (typeof payload.id === "string") {
       setTaskId(payload.id);
     }
-    if (typeof payload.progress === "number") {
-      setProgress(Math.min(100, Math.max(0, Math.round(payload.progress))));
-    }
     if (typeof payload.status === "string") {
       if (payload.status === "running") setStatus("running");
       else if (payload.status === "succeeded") setStatus("succeeded");
@@ -263,11 +213,13 @@ export function CharacterUploader({
     const failureReason = typeof payload.failure_reason === "string" ? payload.failure_reason : "";
     const errorDetail = typeof payload.error === "string" ? payload.error : "";
     if (failureReason || errorDetail) {
-      setErrorMessage(failureReason === "input_moderation" 
-        ? "输入内容可能涉及违规" 
-        : failureReason === "output_moderation"
-        ? "生成内容未通过审核"
-        : errorDetail || "上传失败");
+      const message =
+        failureReason === "input_moderation"
+          ? "输入内容可能涉及违规"
+          : failureReason === "output_moderation"
+          ? "生成内容未通过审核"
+          : errorDetail || "上传失败";
+      setErrorMessage(message);
       if (payload.status === "failed") setStatus("failed");
     }
   };
@@ -281,19 +233,6 @@ export function CharacterUploader({
       setErrorMessage("复制失败，请手动复制角色 ID。");
     }
   };
-
-  const statusLabel =
-    status === "running"
-      ? progress > 0
-        ? `${isStreaming ? "上传中" : "创建中"} ${progress}%`
-        : isStreaming
-        ? "上传中"
-        : "创建中"
-      : status === "succeeded"
-      ? "角色已生成"
-      : status === "failed"
-      ? "上传失败"
-      : "等待上传";
 
   return (
     <div className="character-panel">
@@ -334,7 +273,7 @@ export function CharacterUploader({
         ) : (
           <>
             <div className="video-drop-title">拖动视频到此处</div>
-            <div className="video-drop-note">支持从视频中截取 3 秒</div>
+            <div className="video-drop-note">{description}</div>
           </>
         )}
         <button
@@ -380,9 +319,7 @@ export function CharacterUploader({
           >
             {clipOpen ? "收起截取范围" : "设置截取范围"}
           </button>
-          <span className="character-clip-note">
-            在预览时拖动时间线选择 0-3 秒
-          </span>
+          <span className="character-clip-note">在预览时拖动时间线选择 0-3 秒</span>
         </div>
       )}
 
@@ -410,11 +347,7 @@ export function CharacterUploader({
           {isSubmitting ? "生成中..." : label}
         </button>
         {isSubmitting && (
-          <button
-            className="video-cancel"
-            type="button"
-            onClick={() => abortRef.current?.abort()}
-          >
+          <button className="video-cancel" type="button" onClick={() => abortRef.current?.abort()}>
             取消
           </button>
         )}

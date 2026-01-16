@@ -50,15 +50,18 @@ export function useJobPoll() {
         throw new Error(`请求失败 (${response.status})`);
       }
       const payload = await response.json();
-      
+
       if (typeof payload.progress === "number") {
         setProgress(clampProgress(Math.round(payload.progress)));
       }
-      
+
       if (typeof payload.status === "string") {
         if (payload.status === "running" || payload.status === "submitted") {
           setStatus("running");
-          pollRef.current = window.setTimeout(() => void startPolling(id, onJobComplete), POLL_INTERVAL_MS);
+          pollRef.current = window.setTimeout(
+            () => void startPolling(id, onJobComplete),
+            POLL_INTERVAL_MS
+          );
         } else if (payload.status === "succeeded") {
           setStatus("succeeded");
           stopPolling();
@@ -67,10 +70,6 @@ export function useJobPoll() {
           setStatus("failed");
           stopPolling();
         }
-      }
-
-      if (onJobComplete && payload.status === "succeeded") {
-        onJobComplete(payload);
       }
 
       const failureReason = typeof payload.failure_reason === "string" ? payload.failure_reason : "";

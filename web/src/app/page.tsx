@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { Sidebar } from "@/components/Sidebar";
-import { ChatPanel, deriveTitle } from "@/components/ChatPanel";
+import { ChatPanel, DEFAULT_TITLE, deriveTitle } from "@/components/ChatPanel";
 import { createId } from "@/lib/utils";
 
 type Conversation = {
@@ -13,7 +13,6 @@ type Conversation = {
 };
 
 const DEFAULT_ID = "default";
-const DEFAULT_TITLE = "新对话";
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>(() => [
@@ -123,7 +122,6 @@ export default function Home() {
         input={input}
         onInputChange={setInput}
         onSend={handleSend}
-        onStop={stop}
         textareaRef={textareaRef}
       />
     </div>
