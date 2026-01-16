@@ -29,7 +29,7 @@ CODE_SCRIPT = Path(
   or _DEFAULT_CODE_SCRIPT
 )
 PYTHON_BIN = os.environ.get("HELLOAGENT_PYTHON", "python")
-INTENT_MODEL = os.environ.get("HELLOAGENT_INTENT_MODEL", "gpt-4o-mini")
+INTENT_MODEL = os.environ.get("HELLOAGENT_INTENT_MODEL", "gpt-5-mini")
 MAX_TURNS = int(os.environ.get("HELLOAGENT_MAX_TURNS", "0") or "0")
 CHAT_TIMEOUT_SECONDS = int(os.environ.get("HELLOAGENT_TIMEOUT", "300") or "300")
 

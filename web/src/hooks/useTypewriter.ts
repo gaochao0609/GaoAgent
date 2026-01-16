@@ -7,7 +7,17 @@ const getNumberEnv = (value: string | undefined, fallback: number, min: number, 
   return Math.min(Math.max(parsed, min), max);
 };
 
-const TYPEWRITER_TICK_MS = getNumberEnv(process.env.NEXT_PUBLIC_TYPEWRITER_TICK_MS, 30, 0, 2000);
+const TYPEWRITER_SPEED_MULTIPLIER = 1.5;
+const RAW_TYPEWRITER_TICK_MS = getNumberEnv(
+  process.env.NEXT_PUBLIC_TYPEWRITER_TICK_MS,
+  30,
+  0,
+  2000
+);
+const TYPEWRITER_TICK_MS =
+  RAW_TYPEWRITER_TICK_MS <= 0
+    ? RAW_TYPEWRITER_TICK_MS
+    : Math.max(1, Math.round(RAW_TYPEWRITER_TICK_MS / TYPEWRITER_SPEED_MULTIPLIER));
 const TYPEWRITER_CHARS_PER_TICK = getNumberEnv(
   process.env.NEXT_PUBLIC_TYPEWRITER_CHARS_PER_TICK,
   2,
@@ -35,7 +45,7 @@ export function useTypewriter(text: string, active: boolean) {
 
   useEffect(() => {
     if (!active || TYPEWRITER_TICK_MS <= 0) return;
-    
+
     const timer = window.setInterval(() => {
       const target = textRef.current;
       if (indexRef.current >= target.length) {
@@ -45,9 +55,9 @@ export function useTypewriter(text: string, active: boolean) {
       indexRef.current = Math.min(target.length, indexRef.current + TYPEWRITER_CHARS_PER_TICK);
       setDisplayed(target.slice(0, indexRef.current));
     }, TYPEWRITER_TICK_MS);
-    
+
     return () => window.clearInterval(timer);
-  }, [active]);
+  }, [active, text]);
 
   return active ? displayed : text;
 }

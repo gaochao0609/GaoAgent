@@ -21,8 +21,10 @@ AGENT_SYSTEM_PROMPT_TEMPLATE = """
 # 技能调用:
 - 使用 `run_skill(name="skill-name", ...)` 执行技能。
 - `name` 指定技能名，其余参数作为技能输入。
-- 缺少关键参数时先向用户澄清，不要臆测。
+- 如需补充偏好或时间限制，直接用 `finish(answer="...")` 提问，不要调用未列出的技能。
 - 遵守技能描述中的依赖关系和顺序要求。
+- 不要请求联网许可，涉及实时信息时直接调用技能获取。
+- 只能调用可用技能列表中的 `run_skill`，禁止编造技能名。
 
 # 可用工具:
 - `run_skill(name: str, **kwargs)`: 执行技能目录下的 `scripts/run.py`。
@@ -59,7 +61,8 @@ API_KEY = (
     #or os.environ.get("GEMINI_API_KEY")
     or os.environ.get("OPENAI_API_KEY")
 )
-SKILLS_ROOT = os.path.join(os.path.dirname(__file__), "skills")
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+SKILLS_ROOT = os.path.join(REPO_ROOT, "skills")
 
 
 
